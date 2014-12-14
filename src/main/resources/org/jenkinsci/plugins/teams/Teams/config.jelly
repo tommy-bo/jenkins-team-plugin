@@ -1,7 +1,0 @@
-<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
-	<j:if test="${!empty(descriptor.teams)}">
-		<f:entry title="${%Responsible Team}" field="responsibleTeam">
-			<f:select/>
-		</f:entry>
-	</j:if>
-</j:jelly>

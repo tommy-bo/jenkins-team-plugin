@@ -24,5 +24,19 @@ THE SOFTWARE.
 -->
 
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
-	<div>Team <st:out value="${it.teamName}"/></div>
+	<f:section title="Teams">
+		<f:entry title="Teams" field="teams">
+			<f:repeatable field="teams" add="Add team" minimum="0">
+				<table width="100%">
+					<f:entry title="Team name" field="teamName">
+						<f:textbox />
+					</f:entry>
+				</table>
+				<!--TODO: members-->
+				<div align="right">
+					<f:repeatableDeleteButton/>
+				</div>
+			</f:repeatable>
+		</f:entry>
+	</f:section>
 </j:jelly>
