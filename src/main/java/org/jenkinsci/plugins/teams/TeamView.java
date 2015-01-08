@@ -125,7 +125,7 @@ public class TeamView extends View implements Saveable {
 			if(lastBuild != null && lastBuild.getResult() != null && lastBuild.getResult().isWorseThan(Result.SUCCESS)) {
 				for(User user : (Set<User>) lastBuild.getCulprits()) {
 					final TeamUserProperty teamProperty = user.getProperty(TeamUserProperty.class);
-					if(teamProperty != null && teamProperty.getTeamName().equals(teamName) ) {
+					if(notNull(teamProperty) && notNull(teamProperty.getTeamName()) && teamProperty.getTeamName().equals(teamName) ) {
 						return true;
 					}
 				}
@@ -133,6 +133,10 @@ public class TeamView extends View implements Saveable {
 		}
 		return false;
 	}
+    
+    private boolean notNull(Object object) {
+        return object != null;
+    }
 
 	@Extension
 	public static final class DescriptorImpl extends ViewDescriptor {
