@@ -50,6 +50,8 @@ import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.StaplerResponse;
 import org.kohsuke.stapler.export.Exported;
 
+import hudson.model.ItemGroup;
+import hudson.model.ModifiableItemGroup;
 import static hudson.model.Result.ABORTED;
 
 /**
@@ -58,96 +60,100 @@ import static hudson.model.Result.ABORTED;
  */
 public class TeamView extends View implements Saveable {
 
-	private String teamName;
+    private String teamName;
 
-	@DataBoundConstructor
-	public TeamView(String name, ViewGroup owner) {
-		super(name, owner);
-	}
+    @DataBoundConstructor
+    public TeamView(String name, ViewGroup owner) {
+        super(name, owner);
+    }
 
-	@Exported
-	public String getTeamName() {
-		return teamName;
-	}
+    @Exported
+    public String getTeamName() {
+        return teamName;
+    }
 
-	public void setTeamName(String teamName) {
-		this.teamName = teamName;
-	}
+    public void setTeamName(String teamName) {
+        this.teamName = teamName;
+    }
 
-	@Override
-	public Collection<TopLevelItem> getItems() {
-		List<TopLevelItem> result = new ArrayList<>();
-		List<TopLevelItem> allItems = Jenkins.getInstance().getAllItems(TopLevelItem.class);
-		for (TopLevelItem item : allItems) {
-			if (teamIsResponsibleFor(item) || teammemberBrokeIt(item)) {
-				result.add(item);
-			}
-		}
-		return result;
-	}
+    @Override
+    public Collection<TopLevelItem> getItems() {
+        List<TopLevelItem> result = new ArrayList<>();
+        List<TopLevelItem> allItems = Jenkins.getInstance().getAllItems(TopLevelItem.class);
+        for (TopLevelItem item : allItems) {
+            if (teamIsResponsibleFor(item) || teammemberBrokeIt(item)) {
+                result.add(item);
+            }
+        }
+        return result;
+    }
 
-	@Override
-	public boolean contains(TopLevelItem item) {
-		return teamIsResponsibleFor(item);
-	}
+    @Override
+    public boolean contains(TopLevelItem item) {
+        return teamIsResponsibleFor(item);
+    }
 
-	@Override
-	public void onJobRenamed(Item item, String string, String string1) {
-		throw new UnsupportedOperationException("Not supported yet.");
-	}
+    @Override
+    protected void submit(StaplerRequest req) throws IOException, ServletException, Descriptor.FormException {
+        JSONObject json = req.getSubmittedForm();
+        this.setTeamName(json.getString("teamName"));
 
-	@Override
-	protected void submit(StaplerRequest req) throws IOException, ServletException, Descriptor.FormException {
-		JSONObject json = req.getSubmittedForm();
-		this.setTeamName(json.getString("teamName"));
+    }
 
-	}
+    @Override
+    public Item doCreateItem(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException {
+        ItemGroup<? extends TopLevelItem> ig = getOwnerItemGroup();
+        if (ig instanceof ModifiableItemGroup) {
+            TopLevelItem item = ((ModifiableItemGroup<? extends TopLevelItem>) ig).doCreateItem(req, rsp);
+            if (item instanceof AbstractProject) {
+                ((AbstractProject) item).addProperty(new TeamJobProperty(teamName));
+                item.save();
+            }
+            return item;
+        }
+        return null;
+    }
 
-	@Override
-	public Item doCreateItem(StaplerRequest sr, StaplerResponse sr1) throws IOException, ServletException {
-		throw new UnsupportedOperationException("Not supported yet.");
-	}
+    private boolean teamIsResponsibleFor(Item item) {
+        if (item instanceof AbstractProject) {
+            JobProperty property = ((AbstractProject) item).getProperty(TeamJobProperty.class);
+            return property != null && teamName.equals(((TeamJobProperty) property).getResponsibleTeam());
+        }
+        return false;
+    }
 
-	private boolean teamIsResponsibleFor(Item item) {
-		if (item instanceof AbstractProject) {
-			JobProperty property = ((AbstractProject) item).getProperty(TeamJobProperty.class);
-			return property != null && teamName.equals(((TeamJobProperty) property).getResponsibleTeam());
-		}
-		return false;
-	}
+    private boolean teammemberBrokeIt(TopLevelItem item) {
+        if (item instanceof AbstractProject) {
+            AbstractBuild lastBuild = ((AbstractProject) item).getLastBuild();
+            while (lastBuild != null && (lastBuild.isBuilding() || lastBuild.getResult() == ABORTED)) {
+                lastBuild = lastBuild.getPreviousBuild();
+            }
+            if (lastBuild != null && lastBuild.getResult() != null && lastBuild.getResult().isWorseThan(Result.SUCCESS)) {
+                for (User user : (Set<User>) lastBuild.getCulprits()) {
+                    final TeamUserProperty teamProperty = user.getProperty(TeamUserProperty.class);
+                    if (notNull(teamProperty) && notNull(teamProperty.getTeamName()) && teamProperty.getTeamName().equals(teamName)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
 
-	private boolean teammemberBrokeIt(TopLevelItem item) {
-		if(item instanceof AbstractProject) {
-			AbstractBuild lastBuild = ((AbstractProject) item).getLastBuild();
-			while(lastBuild != null && (lastBuild.isBuilding() || lastBuild.getResult() == ABORTED)) {
-				lastBuild = lastBuild.getPreviousBuild();
-			}
-			if(lastBuild != null && lastBuild.getResult() != null && lastBuild.getResult().isWorseThan(Result.SUCCESS)) {
-				for(User user : (Set<User>) lastBuild.getCulprits()) {
-					final TeamUserProperty teamProperty = user.getProperty(TeamUserProperty.class);
-					if(notNull(teamProperty) && notNull(teamProperty.getTeamName()) && teamProperty.getTeamName().equals(teamName) ) {
-						return true;
-					}
-				}
-			}
-		}
-		return false;
-	}
-    
     private boolean notNull(Object object) {
         return object != null;
     }
 
-	@Extension
-	public static final class DescriptorImpl extends ViewDescriptor {
+    @Extension
+    public static final class DescriptorImpl extends ViewDescriptor {
 
-		@Override
-		public String getDisplayName() {
-			return "TeamView";
-		}
+        @Override
+        public String getDisplayName() {
+            return "TeamView";
+        }
 
-		public ListBoxModel doFillTeamNameItems() {
-			return ((TeamJobProperty.TeamPluginDescriptor) Jenkins.getInstance().getDescriptorOrDie(TeamJobProperty.class)).doFillResponsibleTeamItems();
-		}
-	}
+        public ListBoxModel doFillTeamNameItems() {
+            return ((TeamJobProperty.TeamPluginDescriptor) Jenkins.getInstance().getDescriptorOrDie(TeamJobProperty.class)).doFillResponsibleTeamItems();
+        }
+    }
 }
